@@ -81,7 +81,7 @@ which results in
 #include "project/src/baz.h"
 ```
 
-and then I just add `/path/to/project/includes` into the include path. Of course, this means that the build pipeline needs to be smart enough not to crash on a cyclic symlink...
+and then I just add `/path/to/project/deps` into the include path. Of course, this means that the build pipeline needs to be smart enough not to crash on a cyclic symlink...
 
 ## Motivation: Exhibit A, the Nordic nRF5 SDK
 
