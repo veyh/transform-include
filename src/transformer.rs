@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug)]
 pub struct Transformer {
     pub keep_going: bool,
+    pub system_includes: bool,
     pub include: Vec<String>,
     pub map: Vec<MapFile>,
     pub checker: Box<dyn FileExistsCheck>,
@@ -30,8 +31,12 @@ pub trait FileExistsCheck: std::fmt::Debug {
 
 impl Transformer {
     pub fn transform(&self, r: impl Read) -> Result<String> {
-        static RE: Lazy<Regex> = Lazy::new(||
+        static RE_QUOTE: Lazy<Regex> = Lazy::new(||
             Regex::new(r#"^(\s*#include\s*")([^"]+)(".*)$"#).unwrap()
+        );
+
+        static RE_SYSTEM: Lazy<Regex> = Lazy::new(||
+            Regex::new(r#"^(\s*#include\s*<)([^<>]+)(>.*)$"#).unwrap()
         );
 
         let mut new_lines = vec![];
@@ -39,7 +44,13 @@ impl Transformer {
         for line in BufReader::new(r).lines() {
             let line = line?;
 
-            let Some(captures) = RE.captures(&line) else {
+            let maybe_captures = RE_QUOTE.captures(&line)
+                .or_else(|| {
+                    if self.system_includes { RE_SYSTEM.captures(&line) }
+                    else { None }
+                });
+
+            let Some(captures) = maybe_captures else {
                 new_lines.push(line);
                 continue;
             };
@@ -156,8 +167,12 @@ mod tests {
             #include "foo.h"
             #include "sub/bar.h"
 
+            #include <foo.h>
+            #include <sub/bar.h>
+
             #ifdef WHATEVER
                 #include "baz.h"
+                #include <baz.h>
             #endif
 
             int main(void) { return 0; }
@@ -168,8 +183,12 @@ mod tests {
             #include "project/a/foo.h"
             #include "project/a/sub/bar.h"
 
+            #include <foo.h>
+            #include <sub/bar.h>
+
             #ifdef WHATEVER
                 #include "project/b/baz.h"
+                #include <baz.h>
             #endif
 
             int main(void) { return 0; }
@@ -177,6 +196,77 @@ mod tests {
 
         let transformer = Transformer {
             keep_going: true,
+            system_includes: false,
+            include: vec![
+                "/path/to/project/a".to_string(),
+                "/path/to/project/b".to_string(),
+            ],
+            map: vec![
+                MapFile {
+                    src: "/path/to/project/a".to_string(),
+                    dst: "project/a".to_string()
+                },
+                MapFile {
+                    src: "/path/to/project/b".to_string(),
+                    dst: "project/b".to_string()
+                },
+            ],
+            checker: Box::new(FileExistsCheckFake {
+                files: vec![
+                    "/path/to/project/a/foo.h".into(),
+                    "/path/to/project/a/sub/bar.h".into(),
+                    "/path/to/project/b/baz.h".into(),
+                ],
+            }),
+        };
+
+        let r = Cursor::new(content);
+        let actual = transformer.transform(r)?;
+
+        similar_asserts::assert_eq!(actual, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolves_and_maps_system_includes() -> Result<()> {
+        with_tracing();
+
+        let content = r#"
+            // comment
+            #include "foo.h"
+            #include "sub/bar.h"
+
+            #include <foo.h>
+            #include <sub/bar.h>
+
+            #ifdef WHATEVER
+                #include "baz.h"
+                #include <baz.h>
+            #endif
+
+            int main(void) { return 0; }
+        "#;
+
+        let expected = r#"
+            // comment
+            #include "project/a/foo.h"
+            #include "project/a/sub/bar.h"
+
+            #include <project/a/foo.h>
+            #include <project/a/sub/bar.h>
+
+            #ifdef WHATEVER
+                #include "project/b/baz.h"
+                #include <project/b/baz.h>
+            #endif
+
+            int main(void) { return 0; }
+        "#;
+
+        let transformer = Transformer {
+            keep_going: true,
+            system_includes: true,
             include: vec![
                 "/path/to/project/a".to_string(),
                 "/path/to/project/b".to_string(),

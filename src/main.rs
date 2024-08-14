@@ -32,6 +32,10 @@ struct CliArgs {
     #[arg(short = 'I', long)]
     include: Vec<String>,
 
+    /// Use this flag to also transform system includes like <foo.h>
+    #[arg(long)]
+    system_includes: bool,
+
     /// Paths to map to other paths. Format: "/path/to/old:/path/to/new"
     #[arg(short, long, required = true)]
     map: Vec<String>,
@@ -96,6 +100,7 @@ impl App {
             file: cli_args.file,
             transformer: Transformer {
                 keep_going: cli_args.keep_going,
+                system_includes: cli_args.system_includes,
                 include: cli_args.include,
                 map,
                 checker: Box::new(FileExistsCheckImpl),
