@@ -22,6 +22,7 @@ Arguments:
 Options:
   -n, --dry-run            Don't write to disk, just print the diffs that would happen
   -I, --include <INCLUDE>  Include path used when compiling. Can be specified multiple times
+      --system-includes    Use this flag to also transform system includes like <foo.h>
   -m, --map <MAP>          Paths to map to other paths. Format: "/path/to/old:/path/to/new"
   -k, --keep-going         Ignore unresolved include paths instead of exiting
   -h, --help               Print help

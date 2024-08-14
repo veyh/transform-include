@@ -1,4 +1,0 @@
-kind: Added
-body: Support transforming system includes (`#include <foo.h>`) with `--system-includes`
-  option
-time: 2024-08-14T20:09:50.776386918+03:00
